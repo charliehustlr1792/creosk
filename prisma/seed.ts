@@ -11,7 +11,7 @@ async function main() {
   const products = [
     {
       name: "White Linen Oversized Shirt",
-      brand: "StyleAI Studio",
+      brand: "creosk Studio",
       price: 1299,
       imageUrl: "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=400",
       category: "shirt",
@@ -22,7 +22,7 @@ async function main() {
     },
     {
       name: "Black Structured Blazer",
-      brand: "StyleAI Studio",
+      brand: "creosk Studio",
       price: 3499,
       imageUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400",
       category: "top",
@@ -33,7 +33,7 @@ async function main() {
     },
     {
       name: "Floral Chiffon Blouse",
-      brand: "StyleAI Studio",
+      brand: "creosk Studio",
       price: 999,
       imageUrl: "https://images.unsplash.com/photo-1485462537746-965f33f7f6a7?w=400",
       category: "top",
@@ -44,7 +44,7 @@ async function main() {
     },
     {
       name: "Navy Striped Polo",
-      brand: "StyleAI Studio",
+      brand: "creosk Studio",
       price: 799,
       imageUrl: "https://images.unsplash.com/photo-1586790170083-2f9ceadc732d?w=400",
       category: "shirt",
@@ -55,7 +55,7 @@ async function main() {
     },
     {
       name: "Rust Linen Co-ord Top",
-      brand: "StyleAI Studio",
+      brand: "creosk Studio",
       price: 1599,
       imageUrl: "https://images.unsplash.com/photo-1551163943-3f6a855d1153?w=400",
       category: "top",
@@ -66,7 +66,7 @@ async function main() {
     },
     {
       name: "White Cotton Formal Shirt",
-      brand: "StyleAI Studio",
+      brand: "creosk Studio",
       price: 1099,
       imageUrl: "https://images.unsplash.com/photo-1603251578711-3290ca1a0187?w=400",
       category: "shirt",
