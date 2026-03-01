@@ -23,8 +23,9 @@ export default function PositionGuide() {
 
       {/* Tips */}
       <div className="absolute bottom-6 left-0 right-0 flex flex-col items-center gap-1">
-        <p className="text-xs text-zinc-400 text-center">
-          Stand 1–2 meters from camera · Face forward · Plain background works best
+        <p className="text-xs text-zinc-400 text-center px-4">
+          Stand 1–2m away · Face forward · Full upper body in frame ·
+          <span className="text-zinc-500"> AR preview is indicative — click Generate HD for realistic result</span>
         </p>
       </div>
     </div>

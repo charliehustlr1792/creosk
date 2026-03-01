@@ -1,7 +1,6 @@
 import {
   PoseLandmarker,
   FilesetResolver,
-  DrawingUtils,
 } from "@mediapipe/tasks-vision"
 
 let poseLandmarker: PoseLandmarker | null = null
@@ -21,18 +20,19 @@ export async function loadPoseLandmarker() {
     },
     runningMode: "VIDEO",
     numPoses: 1,
+    minPoseDetectionConfidence: 0.5,
+    minPosePresenceConfidence: 0.5,
+    minTrackingConfidence: 0.5,
   })
 
   return poseLandmarker
 }
 
 export function getShoulderPoints(landmarks: any[]) {
-  // landmarks[11] = left shoulder, landmarks[12] = right shoulder
-  // landmarks[23] = left hip, landmarks[24] = right hip
-  const leftShoulder = landmarks[11]
-  const rightShoulder = landmarks[12]
-  const leftHip = landmarks[23]
-  const rightHip = landmarks[24]
-
-  return { leftShoulder, rightShoulder, leftHip, rightHip }
+  return {
+    leftShoulder: landmarks[11],
+    rightShoulder: landmarks[12],
+    leftHip: landmarks[23],
+    rightHip: landmarks[24],
+  }
 }

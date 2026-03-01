@@ -1,102 +1,118 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { loadPoseLandmarker, getShoulderPoints } from "@/lib/mediapipe"
+import { loadPoseLandmarker } from "@/lib/mediapipe"
 
 interface Props {
-    videoElement: HTMLVideoElement | null
-    clothingImageUrl: string
-    active: boolean
+  videoElement: HTMLVideoElement | null
+  clothingImageUrl: string
+  active: boolean
 }
 
 export default function ClothingOverlay({ videoElement, clothingImageUrl, active }: Props) {
-    const canvasRef = useRef<HTMLCanvasElement>(null)
-    const animFrameRef = useRef<number>(0)
-    const clothImageRef = useRef<HTMLImageElement | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const animFrameRef = useRef<number>(0)
+  const bgRemovedRef = useRef<HTMLCanvasElement | null>(null)
+  const landmarkerRef = useRef<any>(null)
 
-    // Preload clothing image
-    useEffect(() => {
-        if (!clothingImageUrl) return
-        const img = new Image()
-        img.crossOrigin = "anonymous"
-        img.src = clothingImageUrl
-        img.onload = () => { clothImageRef.current = img }
-    }, [clothingImageUrl])
+  useEffect(() => {
+    if (!clothingImageUrl) return
+    bgRemovedRef.current = null
 
-    useEffect(() => {
-        if (!active || !videoElement) return
+    const img = new Image()
+    img.crossOrigin = "anonymous"
+    img.src = clothingImageUrl
 
-        let landmarker: any = null
+    img.onload = () => {
+      const offscreen = document.createElement("canvas")
+      offscreen.width = img.naturalWidth
+      offscreen.height = img.naturalHeight
+      const ctx = offscreen.getContext("2d")!
+      ctx.drawImage(img, 0, 0)
 
-        async function init() {
-            landmarker = await loadPoseLandmarker()
-            renderLoop()
+      const imageData = ctx.getImageData(0, 0, offscreen.width, offscreen.height)
+      const data = imageData.data
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i + 1], b = data[i + 2]
+        const brightness = (r + g + b) / 3
+        if ((r > 210 && g > 210 && b > 210) || brightness > 230) {
+          data[i + 3] = Math.max(0, 255 - brightness)
         }
+      }
+      ctx.putImageData(imageData, 0, 0)
+      bgRemovedRef.current = offscreen
+    }
+  }, [clothingImageUrl])
 
-        function renderLoop() {
-            if (!canvasRef.current || !videoElement || !landmarker) return
+  useEffect(() => {
+    if (!active || !videoElement) return
+    let running = true
 
-            const canvas = canvasRef.current
-            const ctx = canvas.getContext("2d")
-            if (!ctx) return
+    async function init() {
+      try {
+        landmarkerRef.current = await loadPoseLandmarker()
+        renderLoop()
+      } catch (e) {
+        console.error("Failed to load landmarker:", e)
+      }
+    }
 
-            canvas.width = videoElement.videoWidth || 640
-            canvas.height = videoElement.videoHeight || 480
+    function renderLoop() {
+      if (!running || !canvasRef.current || !videoElement) return
+      const canvas = canvasRef.current
+      const ctx = canvas.getContext("2d")!
+      const vw = videoElement.videoWidth || 640
+      const vh = videoElement.videoHeight || 480
+      canvas.width = vw
+      canvas.height = vh
+      ctx.clearRect(0, 0, vw, vh)
 
-            // Clear previous frame
-            ctx.clearRect(0, 0, canvas.width, canvas.height)
+      if (!landmarkerRef.current || !bgRemovedRef.current || videoElement.readyState < 2) {
+        animFrameRef.current = requestAnimationFrame(renderLoop)
+        return
+      }
 
-            // Run pose detection
-            const results = landmarker.detectForVideo(videoElement, performance.now())
+      try {
+        const results = landmarkerRef.current.detectForVideo(videoElement, performance.now())
+        if (results?.landmarks?.[0]) {
+          const lm = results.landmarks[0]
+          const ls = lm[11], rs = lm[12], lh = lm[23], rh = lm[24]
+          if (ls && rs && lh && rh) {
+            const lsx = (1 - ls.x) * vw, rsx = (1 - rs.x) * vw
+            const lsy = ls.y * vh, rsy = rs.y * vh
+            const hipY = ((lh.y + rh.y) / 2) * vh
+            const shoulderCX = (lsx + rsx) / 2
+            const shoulderCY = (lsy + rsy) / 2
+            const shoulderW = Math.abs(lsx - rsx)
+            const clothW = shoulderW * 1.7
+            const torsoH = hipY - shoulderCY
+            const clothH = Math.max(torsoH * 1.35, clothW * 1.2)
+            const x = shoulderCX - clothW / 2
+            const y = shoulderCY - clothH * 0.06
 
-            if (results.landmarks && results.landmarks.length > 0) {
-                const landmarks = results.landmarks[0]
-                const { leftShoulder, rightShoulder, leftHip, rightHip } = getShoulderPoints(landmarks)
-
-                if (leftShoulder && rightShoulder && clothImageRef.current) {
-                    // Convert normalized coords to pixel coords
-                    const lx = (1 - leftShoulder.x) * canvas.width   // mirrored
-                    const rx = (1 - rightShoulder.x) * canvas.width
-                    const sy = leftShoulder.y * canvas.height
-
-                    // Hip Y for height calculation
-                    const hipY = ((leftHip?.y || 0) + (rightHip?.y || 0)) / 2 * canvas.height
-
-                    // Calculate clothing dimensions
-                    const shoulderWidth = Math.abs(lx - rx)
-                    const clothWidth = shoulderWidth * 1.3  // slight padding
-                    const clothHeight = (hipY - sy) * 1.2
-
-                    const startX = Math.min(lx, rx) - (clothWidth - shoulderWidth) / 2
-                    const startY = sy * 0.95  // sit just at shoulder line
-
-                    // Draw clothing overlay with transparency
-                    ctx.globalAlpha = 0.85
-                    ctx.drawImage(
-                        clothImageRef.current,
-                        startX,
-                        startY,
-                        clothWidth,
-                        clothHeight
-                    )
-                    ctx.globalAlpha = 1.0
-                }
-            }
-
-            animFrameRef.current = requestAnimationFrame(renderLoop)
+            ctx.save()
+            ctx.globalAlpha = 0.88
+            ctx.drawImage(bgRemovedRef.current, x, y, clothW, clothH)
+            ctx.restore()
+          }
         }
+      } catch (e) { /* ignore frame errors */ }
 
-        init()
+      animFrameRef.current = requestAnimationFrame(renderLoop)
+    }
 
-        return () => {
-            cancelAnimationFrame(animFrameRef.current)
-        }
-    }, [active, videoElement, clothingImageUrl])
+    init()
+    return () => {
+      running = false
+      cancelAnimationFrame(animFrameRef.current)
+    }
+  }, [active, videoElement, clothingImageUrl])
 
-    return (
-        <canvas
-            ref={canvasRef}
-            className="absolute inset-0 w-full h-full scale-x-[-1] pointer-events-none"
-        />
-    )
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 w-full h-full pointer-events-none"
+      style={{ transform: "scaleX(-1)" }}
+    />
+  )
 }

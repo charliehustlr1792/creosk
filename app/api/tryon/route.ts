@@ -1,65 +1,57 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { Client } from "@gradio/client"
 
 export async function POST(req: NextRequest) {
-  const formData = await req.formData()
-  const personImage = formData.get("personImage") as Blob
-  const clothingId = formData.get("clothingId") as string
+  const { productId, userImageBase64 } = await req.json()
 
-  const product = await db.product.findUnique({ where: { id: clothingId } })
+  if (!productId || !userImageBase64) {
+    return NextResponse.json({ error: "Missing productId or image" }, { status: 400 })
+  }
+
+  const product = await db.product.findUnique({ where: { id: productId } })
   if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 })
 
-  const session = await db.tryOnSession.create({
-    data: { clothingId, status: "processing" },
-  })
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
+  const clothUrl = product.imageUrl.startsWith("http")
+    ? product.imageUrl
+    : `${baseUrl}${product.imageUrl}`
 
   try {
-    const VITON_URL = process.env.VITON_API_URL
+    // Convert base64 person image to blob
+    const base64Data = userImageBase64.replace(/^data:image\/\w+;base64,/, "")
+    const personBuffer = Buffer.from(base64Data, "base64")
+    const personBlob = new Blob([personBuffer], { type: "image/png" })
 
-    if (!VITON_URL || VITON_URL === "mock") {
-      // Mock: return the clothing image itself as result
-      await new Promise(r => setTimeout(r, 3000))
-      await db.tryOnSession.update({
-        where: { id: session.id },
-        data: { status: "done" },
-      })
-      return NextResponse.json({ resultUrl: product.imageUrl })
-    }
-
-    // Fetch clothing image
-    const clothRes = await fetch(product.imageUrl)
+    // Fetch cloth image
+    const clothRes = await fetch(clothUrl)
     const clothBlob = await clothRes.blob()
 
-    // Build form data for ViTON
-    const vitonForm = new FormData()
-    vitonForm.append("model", personImage, "person.jpg")
-    vitonForm.append("cloth", clothBlob, "cloth.jpg")
+    console.log("🚀 Connecting to IDM-VTON...")
+    const client = await Client.connect("yisol/IDM-VTON")
 
-    const vitonRes = await fetch(`${VITON_URL}/api/transform`, {
-      method: "POST",
-      body: vitonForm,
+    console.log("🚀 Running try-on...")
+    const result = await client.predict("/tryon", {
+      dict: { background: personBlob, layers: [], composite: null },
+      garm_img: clothBlob,
+      garment_des: product.name,
+      is_checked: true,
+      is_checked_crop: false,
+      denoise_steps: 30,
+      seed: 42,
     })
 
-    if (!vitonRes.ok) throw new Error("ViTON failed")
+    const resultData = result.data as any[]
+    const resultImage = resultData[0]
 
-    // Convert result to base64 so frontend can display it directly
-    const resultBuffer = await vitonRes.arrayBuffer()
-    const base64 = Buffer.from(resultBuffer).toString("base64")
-    const resultUrl = `data:image/jpeg;base64,${base64}`
+    console.log("✅ Try-on complete:", resultImage)
 
-    await db.tryOnSession.update({
-      where: { id: session.id },
-      data: { status: "done" },
-    })
-
-    return NextResponse.json({ resultUrl })
-
-  } catch (e) {
-    console.error(e)
-    await db.tryOnSession.update({
-      where: { id: session.id },
-      data: { status: "failed" },
-    })
-    return NextResponse.json({ error: "Try-on failed" }, { status: 500 })
+    return NextResponse.json({ resultUrl: resultImage.url })
+  } catch (error: any) {
+    console.error("IDM-VTON error:", error)
+    return NextResponse.json(
+      { error: `Try-on failed: ${error.message}` },
+      { status: 500 }
+    )
   }
 }
