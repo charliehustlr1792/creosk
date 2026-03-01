@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     const resultImage = resultData[0]
 
     console.log("✅ Try-on complete:", resultImage)
-
+    console.log("Result data:", JSON.stringify(resultData[0]))
     return NextResponse.json({ resultUrl: resultImage.url })
   } catch (error: any) {
     console.error("IDM-VTON error:", error)
